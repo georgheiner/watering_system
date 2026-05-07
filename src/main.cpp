@@ -51,6 +51,8 @@ unsigned long wateringStartTime = 0;
 uint16_t wateringDuration = 0;
 int lastActivatedSchedule = -1;
 int lastMinuteChecked = -1;
+unsigned long lastNtpSync = 0;
+#define NTP_RESYNC_INTERVAL (60UL * 60UL * 1000UL) // alle 60 Minuten
 
 void loadSchedules() {
   EEPROM.begin(EEPROM_SIZE);
@@ -503,6 +505,19 @@ void loop() {
   ArduinoOTA.handle();
   server.handleClient();
   checkWateringSchedule();
+
+  // NTP-Resync wenn WLAN verbunden und Intervall abgelaufen
+  if (WiFi.status() == WL_CONNECTED) {
+    unsigned long now = millis();
+    if (lastNtpSync == 0 || (now - lastNtpSync >= NTP_RESYNC_INTERVAL)) {
+      configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+      lastNtpSync = now;
+      Serial.println("[NTP] Zeit neu synchronisiert");
+      if (telnetClient && telnetClient.connected()) {
+        telnetClient.println("[NTP] Zeit neu synchronisiert");
+      }
+    }
+  }
 
   // Telnet: accept new client or drop disconnected one
   if (telnetServer.hasClient()) {
